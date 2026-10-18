@@ -1,4 +1,4 @@
-name = "portal-os1-edge-kernel"
+name = "portal-os1"
 main = "src/kernel/index.ts"
 compatibility_date = "2026-04-01"
 
@@ -18,4 +18,4 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["MicrokernelProcessActor"]
+new_sqlite_classes = ["MicrokernelProcessActor"]
