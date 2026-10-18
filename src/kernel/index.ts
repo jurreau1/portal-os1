@@ -1,7 +1,10 @@
 /**
- * Portal-OS1 Unified Microkernel Edge Runtime
- * Target: Cloudflare Workers & Durable Objects with Integrated Security & ICVS Bridge
+ * Portal-OS1 Unified Microkernel Edge Worker
+ * Target: Cloudflare Workers & Durable Objects
  */
+
+import { SemanticFirewall, FirewallResult } from './firewall';
+import { ICVSBridge, CognitiveFrame } from './icvs';
 
 export interface Env {
   DB: D1Database;
@@ -18,43 +21,30 @@ interface JSONRPCRequest {
   timestamp: number;
 }
 
-// --- Semantic Firewall Stub ---
-class SemanticFirewall {
-  public static inspect(method: string, sourcePid: string, params: Record<string, any>) {
-    if (method.startsWith('kernel.sys.') && !sourcePid.startsWith('kernel_root')) {
-      return { allowed: false, sanitizedParams: {}, violationReason: `Privilege Violation: '${sourcePid}' unauthorized for '${method}'` };
-    }
-    return { allowed: true, sanitizedParams: params };
-  }
-}
-
-// --- ICVS Bridge Stub ---
-class ICVSBridge {
-  public static verifyFrame(frame: any): boolean {
-    return frame && frame.frame_id && typeof frame.epoch === 'number' && frame.confidence_score >= 0.5;
-  }
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     
+    // Route 1: Core IPC & Process Management
     if (url.pathname === '/api/kernel/ipc' && request.method === 'POST') {
       return handleKernelIPC(request, env);
     }
 
+    // Route 2: Epoch State Recovery / Rollback
     if (url.pathname === '/api/kernel/recover' && request.method === 'POST') {
       return handleStateRecovery(request, env);
     }
 
+    // Route 3: ICVS Cognitive Frame Ingestion
     if (url.pathname === '/api/kernel/icvs/ingest' && request.method === 'POST') {
       return handleICVSIngest(request, env);
     }
 
+    // System Heartbeat / Health Check
     return new Response(JSON.stringify({
       system: "Portal-OS1",
       status: "ONLINE",
-      architecture: "Unified Edge Microkernel & Security Hypervisor",
+      architecture: "Edge-Native Microkernel & Hypervisor",
       cost_model: "$0.00/mo Zero-Cost"
     }, null, 2), {
       headers: { "Content-Type": "application/json" }
@@ -62,16 +52,24 @@ export default {
   }
 };
 
+/**
+ * Handles incoming JSON-RPC 2.0 IPC requests through the Semantic Firewall
+ */
 async function handleKernelIPC(request: Request, env: Env): Promise<Response> {
   try {
     const body: JSONRPCRequest = await request.json();
     
     if (!body.jsonrpc || !body.method || !body.source_pid) {
-      return new Response(JSON.stringify({ error: "Invalid IPC Envelope" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Invalid IPC Envelope Structure" }), { status: 400 });
     }
 
-    // 1. Semantic Firewall Security Inspection
-    const firewallCheck = SemanticFirewall.inspect(body.method, body.source_pid, body.params);
+    // 1. Pass request through the Semantic Firewall
+    const firewallCheck: FirewallResult = SemanticFirewall.inspect(
+      body.method, 
+      body.source_pid, 
+      body.params || {}
+    );
+
     if (!firewallCheck.allowed) {
       await logAudit(env, 'PRIVILEGE_VIOLATION', body.source_pid, firewallCheck.violationReason!);
       return new Response(JSON.stringify({ error: firewallCheck.violationReason }), { status: 403 });
@@ -79,7 +77,7 @@ async function handleKernelIPC(request: Request, env: Env): Promise<Response> {
 
     const cleanParams = firewallCheck.sanitizedParams;
 
-    // 2. Process Spawn & Initial Epoch Creation
+    // 2. Handle Process Spawning & Initial Epoch Creation
     if (body.method === 'kernel.process.spawn') {
       const pid = cleanParams.pid || `proc_${Math.random().toString(36).substr(2, 9)}`;
       const initialContext = JSON.stringify(cleanParams.context || {});
@@ -106,12 +104,20 @@ async function handleKernelIPC(request: Request, env: Env): Promise<Response> {
         )
       ]);
 
-      return new Response(JSON.stringify({ jsonrpc: "2.0", result: { pid, epoch: 1, status: "SPAWNED_SECURELY" }, id: body.msg_id }), {
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        result: { pid, epoch: 1, status: "SPAWNED_SECURELY" },
+        id: body.msg_id
+      }), {
         headers: { "Content-Type": "application/json" }
       });
     }
 
-    return new Response(JSON.stringify({ jsonrpc: "2.0", result: { status: "ACKNOWLEDGED" }, id: body.msg_id }), {
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      result: { status: "ACKNOWLEDGED" },
+      id: body.msg_id
+    }), {
       headers: { "Content-Type": "application/json" }
     });
   } catch (err: any) {
@@ -119,22 +125,33 @@ async function handleKernelIPC(request: Request, env: Env): Promise<Response> {
   }
 }
 
+/**
+ * Ingests and verifies multi-agent ICVS cognitive frames
+ */
 async function handleICVSIngest(request: Request, env: Env): Promise<Response> {
   try {
-    const frame = await request.json();
+    const frame: CognitiveFrame = await request.json();
     
     if (!ICVSBridge.verifyFrame(frame)) {
-      return new Response(JSON.stringify({ error: "Invalid or low-confidence ICVS frame verification failed" }), { status: 400 });
+      await logAudit(env, 'ICVS_ANOMALY', frame.agent_pid || 'unknown', 'Frame verification failed or confidence below threshold.');
+      return new Response(JSON.stringify({ error: "Invalid ICVS frame signature or confidence score." }), { status: 400 });
     }
 
-    return new Response(JSON.stringify({ status: "ICVS_FRAME_ACCEPTED", frame_id: (frame as any).frame_id }), {
+    return new Response(JSON.stringify({
+      status: "ICVS_FRAME_ACCEPTED",
+      frame_id: frame.frame_id,
+      verified_epoch: frame.epoch
+    }), {
       headers: { "Content-Type": "application/json" }
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }, { status: 500 }));
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
 
+/**
+ * Handles automated epoch rollbacks and state recovery from D1 storage
+ */
 async function handleStateRecovery(request: Request, env: Env): Promise<Response> {
   try {
     const { pid } = await request.json();
@@ -151,26 +168,37 @@ async function handleStateRecovery(request: Request, env: Env): Promise<Response
       `UPDATE virtual_processes SET state = 'READY', context_vector = ?, epoch_version = ?, updated_at = CURRENT_TIMESTAMP WHERE pid = ?`
     ).bind(epochRecord.snapshot_data, epochRecord.epoch_version, pid).run();
 
-    return new Response(JSON.stringify({ status: "ROLLBACK_SUCCESS", restored_epoch: epochRecord.epoch_version }), {
+    await logAudit(env, 'ROLLBACK_TRIGGERED', pid, `Successfully restored process to epoch version ${epochRecord.epoch_version}`);
+
+    return new Response(JSON.stringify({
+      status: "ROLLBACK_SUCCESS",
+      restored_pid: pid,
+      restored_epoch: epochRecord.epoch_version
+    }), {
       headers: { "Content-Type": "application/json" }
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
 
+/**
+ * Internal Audit Logger for security events
+ */
 async function logAudit(env: Env, eventType: string, actorPid: string, details: string) {
   try {
     const logId = `audit_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
     await env.DB.prepare(
-      `INSERT INTO kernel_audit_logs (id, event_type, actor_pid, details) VALUES (?, ?, ?, ?)`
+      `INSERT INTO kernel_audit_logs (id, event_type, actor_pid, details, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).bind(logId, eventType, actorPid, details).run();
   } catch (_) {
-    // Fail silently to avoid blocking request cycle on audit logging errors
+    // Fail silently to prevent audit latency from blocking worker request cycles
   }
 }
 
-// Durable Object: Microkernel Process Actor
+/**
+ * Durable Object: Microkernel Process Actor (Manages 2MB Heap Isolation)
+ */
 export class MicrokernelProcessActor {
   state: DurableObjectState;
   env: Env;
@@ -181,6 +209,12 @@ export class MicrokernelProcessActor {
   }
 
   async fetch(request: Request): Promise<Response> {
-    return new Response(JSON.stringify({ actor_status: "PROCESS_HEAP_READY", timestamp: Date.now() }));
+    return new Response(JSON.stringify({
+      actor_status: "PROCESS_HEAP_READY",
+      max_heap_bytes: 2097152,
+      timestamp: Date.now()
+    }), {
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }
