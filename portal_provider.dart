@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-// Configuration Provider for the Edge Endpoint
-final portalEndpointProvider = Provider<String>((ref) => "https://portal-os1-edge-kernel.workers.dev");
+// Configuration Provider for the Edge Endpoint (Updated to live production URL)
+final portalEndpointProvider = Provider<String>((ref) => "https://portal-os1.maxchaz2.workers.dev");
 
 // Active Processes State Notifier
 class PortalProcessNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
   final Ref ref;
 
-  PortalProcessNotifier(this.ref) : super(const AsyncValue.loading());
+  PortalProcessNotifier(this.ref) : super(const AsyncValue.data([]));
 
   Future<void> spawnProcess(String pid, Map<String, dynamic> contextData) async {
     final endpoint = ref.read(portalEndpointProvider);
@@ -37,8 +37,7 @@ class PortalProcessNotifier extends StateNotifier<AsyncValue<List<Map<String, dy
         body: jsonEncode(envelope),
       );
 
-      if (response.statusCode == 200) {
-        // Refresh or update state upon successful spawn
+      if (response.statusCode == 200 || response.statusCode == 201) {
         state.whenData((processes) {
           state = AsyncValue.data([...processes, jsonDecode(response.body)]);
         });
