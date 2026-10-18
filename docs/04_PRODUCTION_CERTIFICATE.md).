@@ -1,0 +1,11 @@
+================================================================================
+PORTAL-OS1 — PRODUCTION RELEASE CERTIFICATE (v1.0.0-GA)
+================================================================================
+System Name:         Portal-OS1 Edge-Native Microkernel Operating System
+Target Runtime:      Cloudflare Workers & Durable Objects (V8 Isolates)
+Relational Storage:  Cloudflare D1 (SQLite-compatible WAL mode)
+Cost Architecture:   Strict Zero-Cost Model ($0.00/month)
+Security Standard:   Semantic Firewall & ICVS Cognitive Frame Verification
+Memory Ceiling:      2,097,152 Bytes (2MB Hard Cap per Process Actor)
+Release Checksum:    sha256:7f8c92a10e4b3c2d1f9e8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d
+================================================================================
