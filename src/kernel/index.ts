@@ -1,43 +1,90 @@
-// 1. Define your Durable Object class with 'export class'
-export class MicrokernelProcessActor {
-  state: DurableObjectState;
-  env: any;
+import { DurableObject } from "cloudflare:workers";
 
-  constructor(state: DurableObjectState, env: any) {
-    this.state = state;
-    this.env = env;
-  }
-
-  async fetch(request: Request): Promise<Response> {
-    // Your actor handling logic here
-    return new Response("Actor active");
-  }
-}
-
-// 2. Define standard CORS headers
+// Define standard CORS headers
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// 3. Export your default Worker fetch handler
+/**
+ * Tier 1 Stateful Actor Microkernel for Portal-OS1
+ * Governed by Durable Objects for persistent fault isolation.
+ */
+export class MicrokernelProcessActor extends DurableObject {
+  state: DurableObjectState;
+  env: any;
+
+  constructor(state: DurableObjectState, env: any) {
+    super(state, env);
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    
+    if (request.method === "POST") {
+      try {
+        const envelope = await request.json() as any;
+        return new Response(JSON.stringify({
+          status: "SUCCESS",
+          actor_id: this.state.id.toString(),
+          received_envelope: envelope,
+          epoch: Date.now()
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    return new Response("Microkernel Actor Active", { status: 200 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     
-    // Handle CORS preflight
+    // 1. Handle browser preflight OPTIONS requests immediately
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
 
     try {
-      // Your routing / IPC handler logic here
-      let response = new Response(JSON.stringify({ status: "OK", message: "Portal-OS1 Kernel Online" }), {
+      const url = new URL(request.url);
+
+      // Route IPC requests to Durable Object if path matches
+      if (url.pathname.startsWith("/api/kernel/ipc")) {
+        let id = env.MICROKERNEL_ACTOR?.idFromName("kernel_root") || env.MICROKERNEL_ACTOR?.newUniqueId();
+        let stub = env.MICROKERNEL_ACTOR?.get(id);
+        
+        if (stub) {
+          let res = await stub.fetch(request);
+          const proxiedResponse = new Response(res.body, res);
+          for (const [key, value] of Object.entries(corsHeaders)) {
+            proxiedResponse.headers.set(key, value);
+          }
+          return proxiedResponse;
+        }
+      }
+
+      // Default Health Check / Status Response
+      let response = new Response(JSON.stringify({ 
+        status: "ONLINE", 
+        kernel: "Portal-OS1 Tier 1 Edge Kernel",
+        timestamp: Date.now() 
+      }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });
 
-      // Attach CORS headers
+      // 2. Attach CORS headers to your actual response
       const newResponse = new Response(response.body, response);
       for (const [key, value] of Object.entries(corsHeaders)) {
         newResponse.headers.set(key, value);
