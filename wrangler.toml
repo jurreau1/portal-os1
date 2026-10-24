@@ -3,8 +3,10 @@ main = "apps/worker/src/index.ts"
 compatibility_date = "2026-04-01"
 
 [vars]
+ENV = "production"
 ENVIRONMENT = "production"
 ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173" # Add the deployed Pages/custom origin before production.
+ICVS_ENABLED = "true"
 MAX_PROCESS_HEAP_BYTES = 2097152 # 2MB Hard Cap
 
 [[d1_databases]]
