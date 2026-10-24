@@ -8,8 +8,8 @@ MAX_PROCESS_HEAP_BYTES = 2097152 # 2MB Hard Cap
 
 [[d1_databases]]
 binding = "DB"
-database_name = "portal-os1-production-db"
-database_id = "ca654771-86f3-41ce-9e16-adcf7407980e"
+database_name = "portal-os1-production1-db"
+database_id = "519881b7-d15c-46b6-9ec8-513c54beb30b"
 
 [durable_objects]
 bindings = [
