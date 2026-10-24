@@ -1,15 +1,17 @@
 name = "portal-os1"
-main = "src/kernel/index.ts"
+main = "apps/worker/src/index.ts"
 compatibility_date = "2026-04-01"
 
 [vars]
 ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173" # Add the deployed Pages/custom origin before production.
 MAX_PROCESS_HEAP_BYTES = 2097152 # 2MB Hard Cap
 
 [[d1_databases]]
 binding = "DB"
 database_name = "portal-os1-production1-db"
 database_id = "519881b7-d15c-46b6-9ec8-513c54beb30b"
+migrations_dir = "apps/worker/d1/migrations"
 
 [durable_objects]
 bindings = [
