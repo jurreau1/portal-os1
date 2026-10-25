@@ -10,17 +10,20 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const path = new URL(request.url).pathname;
-    // Preserve existing kernel IPC and health contracts for the Dart clients.
+
     if (!path.startsWith("/api/") || path.startsWith("/api/kernel/"))
       return kernel.fetch(request, env, ctx);
+
     const origin = request.headers.get("Origin");
     const allowed = (env.ALLOWED_ORIGINS ?? "")
       .split(",")
       .map((value) => value.trim());
+
     const headers = new Headers({
       Vary: "Origin",
       "Cache-Control": "no-store",
     });
+
     if (origin && allowed.includes(origin)) {
       headers.set("Access-Control-Allow-Origin", origin);
       headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -29,19 +32,35 @@ export default {
         "Content-Type, Authorization",
       );
     }
+
     if (origin && !allowed.includes(origin))
       return Response.json(
         { error: "Origin not allowed" },
         { status: 403, headers },
       );
+
     if (request.method === "OPTIONS")
       return new Response(null, { status: 204, headers });
+
     try {
       const response = await routeApi(request, env);
       headers.forEach((value, key) => response.headers.set(key, value));
       return response;
     } catch (error) {
-      console.error("Portal API failure", error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error("[portal-os1] worker request failure", {
+        method: request.method,
+        url: request.url,
+        bindingNames: Object.keys(env ?? {}),
+        message: err.message,
+        stack: err.stack ?? "",
+        sql:
+          typeof (error as any)?.cause === "object" &&
+          "sql" in ((error as any).cause ?? {})
+            ? String((error as any).cause.sql)
+            : undefined,
+      });
+
       return Response.json(
         { error: "Portal data is unavailable" },
         { status: 500, headers },
