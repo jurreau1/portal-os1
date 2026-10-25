@@ -10,6 +10,8 @@ import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Approvals from "./pages/Approvals";
 import Analytics from "./pages/Analytics";
+import Runtime from "./pages/Runtime";
+import Orchestration from "./pages/Orchestration";
 import Settings from "./pages/Settings";
 import "./style.css";
 createRoot(document.getElementById("root")!).render(
@@ -27,6 +29,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="products" element={<Products />} />
             <Route path="products/:id" element={<ProductDetail />} />
             <Route path="approvals" element={<Approvals />} />
+            <Route path="runtime" element={<Runtime />} />
+            <Route path="orchestration" element={<Orchestration />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
             <Route

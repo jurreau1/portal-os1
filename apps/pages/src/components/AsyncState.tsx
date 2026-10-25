@@ -2,7 +2,9 @@ export function AsyncState({
   loading,
   error,
   retry,
+  data,
 }: {
+  data?: unknown;
   loading: boolean;
   error?: string;
   retry: () => void;
@@ -10,7 +12,11 @@ export function AsyncState({
   if (error)
     return (
       <div className="notice error" role="alert">
-        <strong>Unable to load this view</strong>
+        <strong>
+          {data === undefined
+            ? "Unable to load this view"
+            : "Refresh failed — showing the last successful result"}
+        </strong>
         <p>{error}</p>
         <button onClick={retry}>Try again</button>
       </div>
