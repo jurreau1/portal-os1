@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { dashboardResponse } from "./dashboard";
 
 // Define standard CORS headers
 const corsHeaders = {
@@ -58,6 +59,10 @@ export default {
 
     try {
       const url = new URL(request.url);
+
+      if (url.pathname === "/api/dashboard") {
+        return dashboardResponse(env.DB, corsHeaders);
+      }
 
       // Route IPC requests to Durable Object if path matches
       if (url.pathname.startsWith("/api/kernel/ipc")) {

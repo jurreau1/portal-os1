@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
+reviews:
+  auto_review:
+    enabled: true
+  # Cover the current src/kernel/ Worker and all future modules, including
+  # pages/, worker/, icvs/, max-core/, portal-os/, adapters/, and database/.
+  # Keep root configuration, schemas, and docs in review scope as well.
+  path_filters:
+    - "**"

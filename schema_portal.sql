@@ -41,3 +41,25 @@ CREATE TABLE IF NOT EXISTS kernel_audit_logs (
 CREATE INDEX IF NOT EXISTS idx_processes_state ON virtual_processes(state);
 CREATE INDEX IF NOT EXISTS idx_epochs_pid_version ON system_recovery_epochs(pid, epoch_version DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON kernel_audit_logs(created_at DESC);
+
+-- Dashboard product portfolio and approval queue
+CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    stage TEXT NOT NULL,
+    score INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    decided_at DATETIME,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
