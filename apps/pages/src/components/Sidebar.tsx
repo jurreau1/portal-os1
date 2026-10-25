@@ -4,7 +4,9 @@ const links = [
   ["/portfolio", "▦", "Portfolio"],
   ["/pipeline", "⇢", "Pipeline"],
   ["/products", "◇", "Products"],
-  ["/approvals", "✓", "Approvals"],
+  ["/approvals", "✓", "Approval centre"],
+  ["/runtime", "⌁", "Runtime"],
+  ["/orchestration", "⤳", "Orchestration"],
   ["/analytics", "▥", "Analytics"],
   ["/settings", "⚙", "Settings"],
 ];
