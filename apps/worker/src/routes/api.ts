@@ -5,7 +5,10 @@ const productColumns =
 const stages = ["Idea", "Validation", "Build", "Ready", "Live", "Archived"];
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 
-export async function routeApi(request: Request, env: Env): Promise<Response> {
+export async function routeApi(
+  request: Request,
+  env: Env & { DB: D1Database },
+): Promise<Response> {
   const path = new URL(request.url).pathname;
   const decision = path.match(/^\/api\/approvals\/([^/]+)\/(approve|reject)$/);
   if (decision) {

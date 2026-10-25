@@ -1,10 +1,14 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
+import { buildCorsHeaders, withCorsHeaders } from "../src/cors";
 import type { Env } from "../src/types";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 
-const bindings = env as unknown as Env & { TEST_MIGRATIONS: D1Migration[] };
+const bindings = env as unknown as Env & {
+  DB: D1Database;
+  TEST_MIGRATIONS: D1Migration[];
+};
 const origin = "http://localhost:5173";
 const get = (path: string, init?: RequestInit) =>
   SELF.fetch(`https://portal.test${path}`, init);
@@ -191,5 +195,141 @@ describe("Worker API and D1 integration", () => {
       status: "SUCCESS",
       received_envelope: envelope,
     });
+  });
+  it.each([
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://portal-os1.pages.dev",
+  ])("applies credentialed CORS globally for %s", async (allowedOrigin) => {
+    for (const path of ["/", "/api/dashboard", "/api/kernel/ipc"]) {
+      const preflight = await get(path, {
+        method: "OPTIONS",
+        headers: {
+          Origin: allowedOrigin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type,authorization",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(await preflight.text()).toBe("");
+      expect(preflight.headers.get("Access-Control-Allow-Origin")).toBe(
+        allowedOrigin,
+      );
+      expect(preflight.headers.get("Access-Control-Allow-Credentials")).toBe(
+        "true",
+      );
+      expect(preflight.headers.get("Access-Control-Allow-Methods")).toBe(
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+      );
+      expect(preflight.headers.get("Access-Control-Allow-Headers")).toBe(
+        "Content-Type, Authorization",
+      );
+      const response = await get(path, { headers: { Origin: allowedOrigin } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+        allowedOrigin,
+      );
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe(
+        "true",
+      );
+      expect(response.headers.get("Vary")).toContain("Origin");
+    }
+  });
+  it("blocks unapproved origins on API, kernel, health and preflight", async () => {
+    for (const path of ["/", "/api/dashboard", "/api/kernel/ipc"]) {
+      for (const method of ["GET", "OPTIONS"]) {
+        const response = await get(path, {
+          method,
+          headers: { Origin: "https://portal-os1.pages.dev.attacker.test" },
+        });
+        expect(response.status).toBe(403);
+        expect(response.headers.has("Access-Control-Allow-Origin")).toBe(false);
+        expect(response.headers.get("Vary")).toContain("Origin");
+      }
+    }
+    const response = await get("/api/dashboard");
+    expect(response.status).toBe(200);
+    expect(response.headers.has("Access-Control-Allow-Origin")).toBe(false);
+  });
+  it("attaches CORS to storage errors and method errors", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await worker.fetch(
+        new Request("https://portal.test/api/dashboard", {
+          headers: { Origin: "https://portal-os1.pages.dev" },
+        }),
+        {
+          ...bindings,
+          DB: {
+            prepare: () => {
+              throw new Error("Synthetic storage outage");
+            },
+          } as unknown as D1Database,
+        },
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: "Portal data is unavailable",
+      });
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+        "https://portal-os1.pages.dev",
+      );
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe(
+        "true",
+      );
+      expect(response.headers.get("Vary")).toContain("Origin");
+      const missingBinding = await worker.fetch(
+        new Request("https://portal.test/api/dashboard", {
+          headers: { Origin: origin },
+        }),
+        { ...bindings, DB: undefined },
+        {} as ExecutionContext,
+      );
+      expect(missingBinding.status).toBe(500);
+      expect(missingBinding.headers.get("Access-Control-Allow-Origin")).toBe(
+        origin,
+      );
+      const health = await worker.fetch(
+        new Request("https://portal.test/", { headers: { Origin: origin } }),
+        { ...bindings, DB: undefined },
+        {} as ExecutionContext,
+      );
+      expect(health.status).toBe(200);
+      expect(await health.json()).toMatchObject({ status: "ONLINE" });
+    } finally {
+      log.mockRestore();
+    }
+    const response = await get("/api/products", {
+      method: "PUT",
+      headers: { Origin: origin },
+    });
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+  });
+  it("trims origin configuration and preserves existing response variation", () => {
+    const request = new Request("https://portal.test/", {
+      headers: { Origin: origin },
+    });
+    const headers = buildCorsHeaders(request, {
+      ...bindings,
+      ALLOWED_ORIGINS: ` , ${origin} , https://portal-os1.pages.dev , `,
+    });
+    expect(headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    expect(
+      buildCorsHeaders(request, { ...bindings, ALLOWED_ORIGINS: "" }).has(
+        "Access-Control-Allow-Origin",
+      ),
+    ).toBe(false);
+    const response = withCorsHeaders(
+      new Response("ok", { headers: { Vary: "Accept-Encoding" } }),
+      headers,
+    );
+    expect(response.headers.get("Vary")).toBe("Accept-Encoding, Origin");
+    const varied = withCorsHeaders(
+      new Response("ok", { headers: { Vary: "Origin" } }),
+      headers,
+    );
+    expect(varied.headers.get("Vary")).toBe("Origin");
   });
 });

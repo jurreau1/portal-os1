@@ -1,5 +1,6 @@
 import kernel from "./kernel";
 import { routeApi } from "./routes/api";
+import { buildCorsHeaders, withCorsHeaders } from "./cors";
 import type { Env } from "./types";
 export { MicrokernelProcessActor } from "./kernel";
 
@@ -9,43 +10,28 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<Response> {
-    const path = new URL(request.url).pathname;
-
-    if (!path.startsWith("/api/") || path.startsWith("/api/kernel/"))
-      return kernel.fetch(request, env, ctx);
-
+    const headers = buildCorsHeaders(request, env);
+    headers.set("Cache-Control", "no-store");
     const origin = request.headers.get("Origin");
-    const allowed = (env.ALLOWED_ORIGINS ?? "")
-      .split(",")
-      .map((value) => value.trim());
-
-    const headers = new Headers({
-      Vary: "Origin",
-      "Cache-Control": "no-store",
-    });
-
-    if (origin && allowed.includes(origin)) {
-      headers.set("Access-Control-Allow-Origin", origin);
-      headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      headers.set(
-        "Access-Control-Allow-Headers",
-        "Content-Type, Authorization",
-      );
-    }
-
-    if (origin && !allowed.includes(origin))
+    if (origin && !headers.has("Access-Control-Allow-Origin")) {
       return Response.json(
         { error: "Origin not allowed" },
         { status: 403, headers },
       );
-
-    if (request.method === "OPTIONS")
+    }
+    if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers });
-
+    }
     try {
-      const response = await routeApi(request, env);
-      headers.forEach((value, key) => response.headers.set(key, value));
-      return response;
+      const path = new URL(request.url).pathname;
+      let response: Response;
+      if (!path.startsWith("/api/") || path.startsWith("/api/kernel/")) {
+        response = await kernel.fetch(request, env, ctx);
+      } else {
+        if (!env.DB) throw new Error("D1 DB binding is not configured");
+        response = await routeApi(request, { ...env, DB: env.DB });
+      }
+      return withCorsHeaders(response, headers);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error("[portal-os1] worker request failure", {

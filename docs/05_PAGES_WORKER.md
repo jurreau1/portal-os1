@@ -12,7 +12,7 @@ ICVS lives in `icvs/index.ts`; MAX-CORE is an integration boundary awaiting its 
 
 ## API
 
-All responses are JSON. New endpoints return 404 for unknown routes or IDs, 405 for unsupported methods, and generic 500 errors if storage fails. Legacy `/api/kernel/*` behavior and root status are preserved, including the existing wildcard kernel CORS policy. The existing recovery and ICVS ingestion URLs in the Dart client are still placeholders in the kernel and are not implemented by this change.
+All responses are JSON. New endpoints return 404 for unknown routes or IDs, 405 for unsupported methods, and generic 500 errors if storage fails. Legacy `/api/kernel/*` response bodies and root status are preserved. All routes, including kernel and health, now share the configured origin allowlist instead of wildcard kernel CORS. The existing recovery and ICVS ingestion URLs in the Dart client are still placeholders in the kernel and are not implemented by this change.
 
 | Endpoint                          | Response                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ Product fields: `id`, `name`, `description`, `stage`, `score` (0–100), and `up
 
 Decision requests require `Authorization: Bearer <GOVERNOR_API_TOKEN>`. Missing server configuration returns 503; invalid authorization returns 401. Decisions atomically update only pending requests; a second decision returns 409, a nonexistent ID returns 404. Changes persist in D1. SQL values are parameterized. The API does not accept arbitrary product edits.
 
-The new API allows browser origins listed in comma-separated `ALLOWED_ORIGINS`. Configure exact scheme/host/port values. OPTIONS permits Content-Type and Authorization. Disallowed browser origins receive 403. CORS is not authentication; non-browser clients can access public read routes. API responses use `Cache-Control: no-store`.
+All Worker routes allow browser origins listed in comma-separated `ALLOWED_ORIGINS`. The configured defaults include localhost, 127.0.0.1, and `https://portal-os1.pages.dev`. Configure exact scheme/host/port values. Allowed OPTIONS requests return 204 with GET, POST, PUT, PATCH, DELETE, OPTIONS and Content-Type/Authorization permissions. CORS advertises credential support with an exact allowed origin; route handlers still determine supported methods. All responses, including errors, vary by Origin. Disallowed browser origins receive 403. CORS is not authentication; non-browser clients can access public read routes. API responses use `Cache-Control: no-store`.
 
 ## Cloudflare deployment
 
@@ -41,7 +41,7 @@ The new API allows browser origins listed in comma-separated `ALLOWED_ORIGINS`. 
 3. Apply migrations with `npx wrangler d1 migrations apply DB --remote`. Migration 0001 uses the existing kernel schema with `IF NOT EXISTS`; 0002 adds products and approvals. Existing kernel rows remain intact. Do not run the demo seed remotely.
 4. Set the Worker secret with `npx wrangler secret put GOVERNOR_API_TOKEN` and deploy with `npm run deploy:worker`.
 5. Create a Cloudflare Pages project connected to this monorepo. Set root directory to the repository root, build command `npm ci && npm run build`, output directory `apps/pages/dist`, and Node version 24 (or 22.12+).
-6. Set **Pages build variable** `VITE_API_URL=https://portal-os1.maxjurreau.workers.dev` for production and the intended API origin for previews. Rebuild after changing it. No secrets belong in Pages `VITE_` variables.
+6. Set **Pages build variable** `VITE_API_URL=https://portal-os1.maxjurreau.workers.dev` for production and the intended API origin for previews. Rebuild after changing it. If omitted, production builds default to this Worker URL; local development defaults to localhost:8787. No secrets belong in Pages `VITE_` variables.
 7. Alternatively run `npm run deploy:pages` after authenticating Wrangler and configuring the build variable in the local build environment. Pages' default SPA fallback handles direct links; no top-level `404.html` is emitted.
 8. Populate real product and approval data through trusted backend integrations. Empty production tables display empty states. The optional seed is synthetic local data only.
 

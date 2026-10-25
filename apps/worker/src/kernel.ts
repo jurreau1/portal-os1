@@ -1,12 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
 
-// Define standard CORS headers
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
-
 /**
  * Tier 1 Stateful Actor Microkernel for Portal-OS1
  * Governed by Durable Objects for persistent fault isolation.
@@ -57,11 +50,6 @@ export default {
     env: any,
     ctx: ExecutionContext,
   ): Promise<Response> {
-    // 1. Handle browser preflight OPTIONS requests immediately
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
-
     try {
       const url = new URL(request.url);
 
@@ -74,11 +62,7 @@ export default {
 
         if (stub) {
           let res = await stub.fetch(request);
-          const proxiedResponse = new Response(res.body, res);
-          for (const [key, value] of Object.entries(corsHeaders)) {
-            proxiedResponse.headers.set(key, value);
-          }
-          return proxiedResponse;
+          return res;
         }
       }
 
@@ -95,16 +79,11 @@ export default {
         },
       );
 
-      // 2. Attach CORS headers to your actual response
-      const newResponse = new Response(response.body, response);
-      for (const [key, value] of Object.entries(corsHeaders)) {
-        newResponse.headers.set(key, value);
-      }
-      return newResponse;
+      return response;
     } catch (err: any) {
       return new Response(JSON.stringify({ error: err.message }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
       });
     }
   },
