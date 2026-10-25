@@ -83,7 +83,7 @@ export async function routeApi(request: Request, env: Env): Promise<Response> {
     return json(
       (
         await env.DB.prepare(
-          `SELECT a.id, a.product_id AS productId, p.name AS project, a.action, a.priority, a.risk, a.status FROM approvals a JOIN products p ON p.id = a.product_id WHERE a.status = 'pending' ORDER BY CASE a.priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, a.created_at, a.id`,
+          `SELECT a.id, a.product_id AS productId, p.name AS project, a.action, a.priority, a.risk, a.status FROM approvals a JOIN products p ON p.id = a.product_id WHERE a.status = 'pending' ORDER BY a.created_at DESC`,
         ).all()
       ).results,
     );
@@ -109,24 +109,76 @@ export async function routeApi(request: Request, env: Env): Promise<Response> {
     );
   }
   if (path === "/api/dashboard") {
-    const [products, approvals, health] = await env.DB.batch<
-      Record<string, number | null>
-    >([
-      env.DB.prepare(
-        "SELECT COUNT(*) AS projects, COALESCE(SUM(stage = 'Live'),0) AS activeProducts, COALESCE(SUM(stage = 'Ready'),0) AS readyToPublish FROM products",
-      ),
-      env.DB.prepare(
-        "SELECT COUNT(*) AS approvals FROM approvals WHERE status = 'pending'",
-      ),
-      env.DB.prepare(
-        "SELECT ROUND(100.0 * SUM(state IN ('READY','RUNNING','SUSPENDED')) / NULLIF(COUNT(*),0)) AS health FROM virtual_processes",
-      ),
-    ]);
-    return json({
-      ...products.results[0],
-      ...approvals.results[0],
-      ...health.results[0],
-    });
+    try {
+      const productsQuery = `
+        SELECT
+          COUNT(*) AS projects,
+          COALESCE(SUM(stage = 'Live'),0) AS activeProducts,
+          COALESCE(SUM(stage = 'Ready'),0) AS readyToPublish
+        FROM products
+      `;
+
+      const approvalsQuery = `
+        SELECT COUNT(*) AS approvals
+        FROM approvals
+        WHERE status = 'pending'
+      `;
+
+      const healthQuery = `
+        SELECT ROUND(
+          100.0 * SUM(
+            state IN ('READY', 'RUNNING', 'SUSPENDED')
+          ) / NULLIF(COUNT(*),0)
+        ) AS health
+        FROM virtual_processes
+      `;
+
+      const products = await env.DB.prepare(productsQuery).first<{
+        projects: number | null;
+        activeProducts: number | null;
+        readyToPublish: number | null;
+      }>();
+      const approvals = await env.DB.prepare(approvalsQuery).first<{
+        approvals: number | null;
+      }>();
+
+      let health = { health: null as number | null };
+
+      try {
+        const result = await env.DB.prepare(healthQuery).first<{
+          health: number | null;
+        }>();
+
+        if (result && result.health !== null) {
+          health = { health: result.health };
+        }
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            endpoint: "/api/dashboard",
+            query: "virtual_processes health",
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          }),
+        );
+      }
+
+      return json({
+        ...(products ?? {}),
+        ...(approvals ?? {}),
+        ...health,
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          endpoint: "/api/dashboard",
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+      );
+
+      return json({ error: "Portal data is unavailable" }, 500);
+    }
   }
   if (path === "/api/analytics")
     return json(
